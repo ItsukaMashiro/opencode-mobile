@@ -33,10 +33,11 @@ jobs:
         working-directory: packages/mobile
         run: |
           set -euo pipefail
-          APP_NAME=$(ls ios/*.xcworkspace | head -1 | sed 's/.*\/\(.*\)\.xcworkspace/\1/')
+          WORKSPACE=$(find ios -maxdepth 1 -name "*.xcworkspace" -type d | head -1)
+          APP_NAME=$(basename "$WORKSPACE" .xcworkspace)
           echo "Scheme: $APP_NAME"
           xcodebuild \
-            -workspace "ios/$APP_NAME.xcworkspace" \
+            -workspace "$WORKSPACE" \
             -scheme "$APP_NAME" \
             -sdk iphoneos \
             -configuration Release \
