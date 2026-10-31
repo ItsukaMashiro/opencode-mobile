@@ -1,0 +1,62 @@
+name: Build unsigned iOS IPA
+
+on:
+  workflow_dispatch:
+
+env:
+  EXPO_NO_TELEMETRY: "1"
+  CI: "1"
+
+jobs:
+  build-unsigned-ipa:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Prebuild iOS project
+        working-directory: packages/mobile
+        run: npx expo prebuild --platform ios --no-install
+
+      - name: Install CocoaPods
+        working-directory: packages/mobile
+        run: npx pod-install ios
+
+      - name: Build (unsigned, Release)
+        working-directory: packages/mobile
+        run: |
+          set -euo pipefail
+          APP_NAME=$(ls ios/*.xcworkspace | head -1 | sed 's/.*\/\(.*\)\.xcworkspace/\1/')
+          echo "Scheme: $APP_NAME"
+          xcodebuild \
+            -workspace "ios/$APP_NAME.xcworkspace" \
+            -scheme "$APP_NAME" \
+            -sdk iphoneos \
+            -configuration Release \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGNING_IDENTITY="" \
+            build
+
+      - name: Package unsigned IPA
+        working-directory: packages/mobile
+        run: |
+          set -euo pipefail
+          APP_PATH=$(find "$RUNNER_TEMP/dd/Build/Products/Release-iphoneos" -maxdepth 1 -name "*.app" | head -1)
+          echo "App: $APP_PATH"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -a "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/"
+          (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/opencode-unsigned.ipa" Payload)
+          ls -lh "$GITHUB_WORKSPACE/opencode-unsigned.ipa"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-unsigned-ipa
+          path: opencode-unsigned.ipa
